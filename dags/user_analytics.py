@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import boto3
 import duckdb
+
 from airflow import DAG
 from airflow.operators.bash_operator import BashOperator
 from airflow.operators.python_operator import PythonOperator
@@ -15,7 +16,9 @@ from airflow.providers.amazon.aws.transfers.local_to_s3 import (
 from airflow.providers.amazon.aws.transfers.sql_to_s3 import SqlToS3Operator
 
 
-def get_s3_folder(s3_bucket, s3_folder, local_folder="/opt/airflow/temp/s3folder/"):
+def get_s3_folder(
+    s3_bucket, s3_folder, local_folder="/opt/airflow/temp/s3folder/"
+):
     # TODO: Move AWS credentials to env variables
     s3 = boto3.resource(
         service_name="s3",
@@ -45,11 +48,13 @@ with DAG(
     start_date=datetime(2023, 1, 1),
     catchup=False,
 ) as dag:
+
     user_analytics_bucket = "user-analytics"
 
     create_s3_bucket = S3CreateBucketOperator(
         task_id="create_s3_bucket", bucket_name=user_analytics_bucket
     )
+
     movie_review_to_s3 = LocalFilesystemToS3Operator(
         task_id="movie_review_to_s3",
         filename="/opt/airflow/data/movie_review.csv",
@@ -75,13 +80,19 @@ with DAG(
     get_movie_review_to_warehouse = PythonOperator(
         task_id="get_movie_review_to_warehouse",
         python_callable=get_s3_folder,
-        op_kwargs={"s3_bucket": "user-analytics", "s3_folder": "clean/movie_review"},
+        op_kwargs={
+            "s3_bucket": "user-analytics",
+            "s3_folder": "clean/movie_review",
+        },
     )
 
     get_user_purchase_to_warehouse = PythonOperator(
         task_id="get_user_purchase_to_warehouse",
         python_callable=get_s3_folder,
-        op_kwargs={"s3_bucket": "user-analytics", "s3_folder": "raw/user_purchase"},
+        op_kwargs={
+            "s3_bucket": "user-analytics",
+            "s3_folder": "raw/user_purchase",
+        },
     )
 
     def create_user_behaviour_metric():
@@ -120,8 +131,12 @@ with DAG(
     )
 
     markdown_path = "/opt/airflow/dags/scripts/dashboard/"
-    q_cmd = f"cd {markdown_path} && quarto render {markdown_path}/dashboard.qmd"
-    gen_dashboard = BashOperator(task_id="generate_dashboard", bash_command=q_cmd)
+    q_cmd = (
+        f"cd {markdown_path} && quarto render {markdown_path}/dashboard.qmd"
+    )
+    gen_dashboard = BashOperator(
+        task_id="generate_dashboard", bash_command=q_cmd
+    )
 
     create_s3_bucket >> [user_purchase_to_s3, movie_review_to_s3]
 
